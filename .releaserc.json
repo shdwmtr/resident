@@ -6,7 +6,7 @@
         [
             "@semantic-release/exec",
             {
-                "prepareCmd": "make resident.so && strip --strip-all resident.so && make cross && x86_64-w64-mingw32-strip --strip-all resident.dll"
+                "prepareCmd": "make libresident.so && strip --strip-all libresident.so && make cross && x86_64-w64-mingw32-strip --strip-all resident.dll"
             }
         ],
         [
@@ -14,12 +14,12 @@
             {
                 "assets": [
                     {
-                        "path": "resident.so",
-                        "label": "resident.so (Linux x86_64)"
+                        "path": "libresident.so",
+                        "label": "libresident (Linux x86_64)"
                     },
                     {
                         "path": "resident.dll",
-                        "label": "resident.dll (Windows x86_64)"
+                        "label": "libresident (Windows x86_64)"
                     }
                 ]
             }
