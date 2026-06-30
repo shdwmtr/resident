@@ -1,3 +1,4 @@
-reclass.so
-reclass_test
+resident.so
+resident_test
 tests/chunk~2dcc5aaf7.patched.js
+dfa.dot

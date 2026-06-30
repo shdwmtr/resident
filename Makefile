@@ -8,7 +8,7 @@ MINGW_CC      := x86_64-w64-mingw32-gcc
 MINGW_FLAGS   := -std=c11 -O3 -flto -DNDEBUG -fvisibility=hidden
 
 ifeq ($(OS),Windows_NT)
-    OUT     := reclass.dll
+    OUT     := resident.dll
     SHFLAGS := -shared
     # query 32-bit registry view first (Steam is a 32-bit app on Windows)
     STEAM_DIR := $(shell powershell -NoProfile -Command \
@@ -21,7 +21,7 @@ ifeq ($(OS),Windows_NT)
     RM   := del /f
     COPY := copy /y
 else
-    OUT     := reclass.so
+    OUT     := resident.so
     SHFLAGS := -shared -fPIC
     INSTALL_PATH := $(HOME)/.steam/steam/ubuntu12_64/libXtst.so.6
     RM   := rm -f
@@ -32,22 +32,22 @@ endif
 
 all: $(OUT)
 
-release: $(OUT) reclass_test
+release: $(OUT) resident_test
 
-$(OUT): reclass.c thirdparty/libsnare.h
+$(OUT): resident.c thirdparty/libsnare.h
 	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(SHFLAGS) -o $@ $< -lpthread
 
-reclass_test: reclass.c
-	$(CC) $(CFLAGS) $(RELEASE_FLAGS) -DRECLASS_MAIN -o $@ $<
+resident_test: resident.c
+	$(CC) $(CFLAGS) $(RELEASE_FLAGS) -Dresident_MAIN -o $@ $<
 
-test: reclass_test
-	./reclass_test tests/chunk~2dcc5aaf7.js
+test: resident_test
+	./resident_test tests/chunk~2dcc5aaf7.js
 
 install: $(OUT)
 	$(COPY) $< "$(INSTALL_PATH)"
 
-cross: reclass.c thirdparty/libsnare.h
-	$(MINGW_CC) $(MINGW_FLAGS) -shared -o reclass.dll $< -lpthread
+cross: resident.c thirdparty/libsnare.h
+	$(MINGW_CC) $(MINGW_FLAGS) -shared -o resident.dll $< -lpthread
 
 clean:
-	$(RM) $(OUT) reclass_test *.patched.js
+	$(RM) $(OUT) resident_test *.patched.js

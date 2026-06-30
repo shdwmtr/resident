@@ -3,14 +3,26 @@
     "plugins": [
         "@semantic-release/commit-analyzer",
         "@semantic-release/release-notes-generator",
-        ["@semantic-release/exec", {
-            "prepareCmd": "make reclass.so && strip --strip-all reclass.so && make cross && x86_64-w64-mingw32-strip --strip-all reclass.dll"
-        }],
-        ["@semantic-release/github", {
-            "assets": [
-                { "path": "reclass.so",  "label": "reclass.so (Linux x86_64)"   },
-                { "path": "reclass.dll", "label": "reclass.dll (Windows x86_64)" }
-            ]
-        }]
+        [
+            "@semantic-release/exec",
+            {
+                "prepareCmd": "make resident.so && strip --strip-all resident.so && make cross && x86_64-w64-mingw32-strip --strip-all resident.dll"
+            }
+        ],
+        [
+            "@semantic-release/github",
+            {
+                "assets": [
+                    {
+                        "path": "resident.so",
+                        "label": "resident.so (Linux x86_64)"
+                    },
+                    {
+                        "path": "resident.dll",
+                        "label": "resident.dll (Windows x86_64)"
+                    }
+                ]
+            }
+        ]
     ]
 }

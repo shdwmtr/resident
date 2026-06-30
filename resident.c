@@ -1,7 +1,7 @@
 /*
 Copyright (c) 2026 Ethan Alexander
 
-shdwmtr/reclass is licensed under the GNU General Public License v3.0
+shdwmtr/resident is licensed under the GNU General Public License v3.0
 Permissions of this strong copyleft license are conditioned on making available
 complete source code of licensed works and modifications, which include larger
 works using a licensed work, under the same license. Copyright and license
@@ -777,7 +777,7 @@ HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
 #define PATH_MAX 4096
 #endif
 
-#ifndef RECLASS_MAIN
+#ifndef RESIDENT_MAIN
 
 #ifdef _WIN32
 #include <sys/stat.h>
@@ -1014,7 +1014,7 @@ static void fatal(const char *fmt, ...) {
   va_end(args);
 }
 
-#endif /* !RECLASS_MAIN */
+#endif /* !RESIDENT_MAIN */
 
 /* locale-independent classification. isalpha(3) is garbage under musl if LC_ALL
  * is set */
@@ -1061,9 +1061,9 @@ typedef struct {
   char *data;
   size_t len;
   size_t cap;
-} reclass_buf_t;
+} resident_buf_t;
 
-static int rcbuf_reserve(reclass_buf_t *b, size_t need) {
+static int rcbuf_reserve(resident_buf_t *b, size_t need) {
   if (b->len + need <= b->cap)
     return 1;
   /**
@@ -1082,7 +1082,7 @@ static int rcbuf_reserve(reclass_buf_t *b, size_t need) {
   return 1;
 }
 
-static int rcbuf_write(reclass_buf_t *b, const char *src, size_t n) {
+static int rcbuf_write(resident_buf_t *b, const char *src, size_t n) {
   if (!n)
     return 1;
   if (!rcbuf_reserve(b, n))
@@ -1092,7 +1092,7 @@ static int rcbuf_write(reclass_buf_t *b, const char *src, size_t n) {
   return 1;
 }
 
-static int rcbuf_putc(reclass_buf_t *b, char c) {
+static int rcbuf_putc(resident_buf_t *b, char c) {
   return rcbuf_write(b, &c, 1);
 }
 
@@ -1143,9 +1143,9 @@ static const char *rc_match_exports_open(const char *p, const char *end) {
  * CSS module export objects are always flat and always assigned like this,
  * which helps reduce the possibility of false posibilities.
  * */
-static char *reclass_patch(const char *src, size_t src_len, size_t *out_len,
+static char *resident_patch(const char *src, size_t src_len, size_t *out_len,
                            size_t *out_count) {
-  reclass_buf_t out = {0};
+  resident_buf_t out = {0};
   /* pre-size to input + 25% headroom; rewriting grows each match by ~key_len
    * chars */
   if (!rcbuf_reserve(&out, src_len + src_len / 4 + 4096))
@@ -1293,7 +1293,7 @@ oom:
 
 /**
  * o(n) single-pass transducer: spreads classList.add/remove arguments so that
- * the human-readable suffix appended by reclass_patch survives as a real class.
+ * the human-readable suffix appended by resident_patch survives as a real class.
  *
  * detects: classList.add(IDENT[()].IDENT) and classList.remove(IDENT[()].IDENT)
  * rewrites: classList.add(...IDENT[()].IDENT.split(" "))
@@ -1313,9 +1313,9 @@ oom:
  * spread handles both the pre-patch case (no space -> one element) and the
  * post-patch case (space -> two elements) without UB or DOMException.
  */
-static char *reclass_patch_classlist(const char *src, size_t src_len,
+static char *resident_patch_classlist(const char *src, size_t src_len,
                                      size_t *out_len, size_t *out_count) {
-  reclass_buf_t out = {0};
+  resident_buf_t out = {0};
   if (!rcbuf_reserve(&out, src_len + src_len / 8 + 4096))
     return NULL;
 
@@ -1403,7 +1403,7 @@ oom:
   return NULL;
 }
 
-#ifndef RECLASS_MAIN
+#ifndef RESIDENT_MAIN
 /* return the path component of a URL (pointer into the same string). */
 static const char *url_get_path(const char *url) {
   const char *p = strstr(url, "://");
@@ -1600,7 +1600,7 @@ static int lb_handle_request(const char *url, char **data, uint32_t *size,
     size_t cached_len;
     char *cached = rc_cache_get(fpath, st.st_mtime, st.st_size, &cached_len);
     if (cached) {
-      fprintf(stderr, "[reclass] %s: cache hit\n", url_get_basename(url));
+      fprintf(stderr, "[resident] %s: cache hit\n", url_get_basename(url));
       *data      = cached;
       *size      = (uint32_t)cached_len;
       *mime_type = "application/javascript";
@@ -1634,13 +1634,13 @@ static int lb_handle_request(const char *url, char **data, uint32_t *size,
 
   if (patchable) {
     size_t out_len, count;
-    char *patched = reclass_patch(raw, (size_t)fsz, &out_len, &count);
+    char *patched = resident_patch(raw, (size_t)fsz, &out_len, &count);
     free(raw);
     if (!patched)
       return -1;
     size_t cl_count;
     char *patched2 =
-        reclass_patch_classlist(patched, out_len, &out_len, &cl_count);
+        resident_patch_classlist(patched, out_len, &out_len, &cl_count);
     free(patched);
     if (!patched2)
       return -1;
@@ -1648,7 +1648,7 @@ static int lb_handle_request(const char *url, char **data, uint32_t *size,
       rc_cache_put(fpath, st.st_mtime, st.st_size, patched2, out_len);
     fprintf(
         stderr,
-        "[reclass] %s: %zu class(es) rewritten, %zu classList call(s) spread\n",
+        "[resident] %s: %zu class(es) rewritten, %zu classList call(s) spread\n",
         url_get_basename(url), count, cl_count);
     *data = patched2;
     *size = (uint32_t)out_len;
@@ -2121,15 +2121,15 @@ int __stdcall DllMain(HINSTANCE hInst, DWORD reason, LPVOID reserved) {
   return TRUE;
 }
 #endif /* _WIN32 */
-#endif /* !RECLASS_MAIN */
-#ifdef RECLASS_MAIN
+#endif /* !RESIDENT_MAIN */
+#ifdef RESIDENT_MAIN
 #include <time.h>
 static double rc_ms(struct timespec a, struct timespec b) {
   return (b.tv_sec - a.tv_sec) * 1000.0 + (b.tv_nsec - a.tv_nsec) / 1e6;
 }
 int main(int argc, char **argv) {
   if (argc < 2) {
-    fprintf(stderr, "usage: reclass_test <input.js> [output.js]\n");
+    fprintf(stderr, "usage: resident_test <input.js> [output.js]\n");
     return 1;
   }
 
@@ -2176,17 +2176,17 @@ int main(int argc, char **argv) {
   clock_gettime(CLOCK_MONOTONIC, &t1);
 
   size_t out_len, count;
-  char *out = reclass_patch(src, (size_t)fsz, &out_len, &count);
+  char *out = resident_patch(src, (size_t)fsz, &out_len, &count);
   free(src);
   if (!out) {
-    fprintf(stderr, "reclass_patch: oom\n");
+    fprintf(stderr, "resident_patch: oom\n");
     return 1;
   }
   size_t cl_count;
-  char *out2 = reclass_patch_classlist(out, out_len, &out_len, &cl_count);
+  char *out2 = resident_patch_classlist(out, out_len, &out_len, &cl_count);
   free(out);
   if (!out2) {
-    fprintf(stderr, "reclass_patch_classlist: oom\n");
+    fprintf(stderr, "resident_patch_classlist: oom\n");
     return 1;
   }
   clock_gettime(CLOCK_MONOTONIC, &t2);
@@ -2209,4 +2209,4 @@ int main(int argc, char **argv) {
          count, cl_count, output, rm, pm, wm, rm + pm + wm);
   return 0;
 }
-#endif /* RECLASS_MAIN */
+#endif /* RESIDENT_MAIN */

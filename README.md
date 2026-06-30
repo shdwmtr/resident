@@ -43,7 +43,7 @@ stateDiagram-v2
 </tr>
 </table>
 
-`reclass` implements a linear-time lexical transducer over a byte stream. It uses a greedy, left-anchored PEG recognize with a single bounded lookahead rewind, scanning for two token patterns defined by the grammar:
+`resident` implements a linear-time lexical transducer over a byte stream. It uses a greedy, left-anchored PEG recognize with a single bounded lookahead rewind, scanning for two token patterns defined by the grammar:
 ```
 pattern  ::= quoted_key | bare_key
 quoted_key ::= '"' key_q '"' ':"' hash '"'
@@ -115,7 +115,7 @@ flowchart LR
     HRS --> CHK{chunk~*.js\n+ has local file?}
     CHK -->|No| PASS[Calls orig_get_resource\nreturns Steam's handler]
     CHK -->|Yes| DROP[Disposes Steam's handler\nif it returned one]
-    DROP --> CUST[Returns custom\nsteamloopback_request_handler_t\nwith reclass read callbacks]
+    DROP --> CUST[Returns custom\nsteamloopback_request_handler_t\nwith resident read callbacks]
 ```
 
 # Building
@@ -123,10 +123,10 @@ flowchart LR
 All build instructions assume the host is linux. It compiles fine on windows, I just don't have docs for it. 
 
 ```bash
-# build reclass
+# build resident
 $ make
 
-# permanently install reclass into steam
+# permanently install resident into steam
 $ make install
 
 # Cross-compile for Windows from Linux (requires `mingw-w64-gcc`)
