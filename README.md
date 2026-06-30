@@ -16,6 +16,24 @@ index ec676a2..1ca47d7 100644
 +<div class="_1rDh5rXSFZJOqCa4UpnI4z ContentFrame" style="position: relative;">
 ```
 
+# Installation
+
+Packing notice: resident is entirely stateless, and has no config. If you are packaging resident, it is recommended to simply keep it in your installation folder, and
+simply hard-link/soft-link (on windows, by default, softlinks need admin. hard don't) the soname/dll into the webhelpers directory. Killing Steam's webhelper will cause Steam to restart it, which will load/unload resident depending.
+
+## Manual Installation
+
+Linux:
+```bash
+# Installing resident
+$ mv /path/to/resident.so ~/.steam/steam/ubuntu12_64/libXtst.so.6
+# uninstalling resident
+$ rm ~/.steam/steam/ubuntu12_64/libXtst.so.6
+```
+Windows:
+
+Copy the installed `resident.dll` binary into the `steamwebhelper.exe`'s owning directory. 
+
 # Parser
 
 <table>
