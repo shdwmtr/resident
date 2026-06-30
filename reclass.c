@@ -696,8 +696,8 @@ Public License instead of this License.  But first, please read
 #define _GNU_SOURCE
 #endif
 
-#include <X11/Xlib.h>
-#include <X11/extensions/XTest.h>
+typedef void Display;
+typedef int  Bool;
 #include <dlfcn.h>
 #include <linux/limits.h>
 #include <stdio.h>
