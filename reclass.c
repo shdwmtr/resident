@@ -692,6 +692,8 @@ Public License instead of this License.  But first, please read
 #ifndef SHARED_H
 #define SHARED_H
 
+#ifndef _WIN32
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -761,7 +763,8 @@ HOOK_FUNC(h_xtst, XTestFakeRelativeMotionEvent, int,
 HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
           (Display * a, int b, int c, int d, unsigned long e), (a, b, c, d, e))
 
-#endif // SHARED_H
+#endif /* !_WIN32 */
+#endif /* SHARED_H */
 
 #include <limits.h>
 #include <stddef.h>
