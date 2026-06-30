@@ -15,16 +15,28 @@ After:
 
 ## Building
 
-Build reclass
+Build reclass (Linux)
 
 ```bash
 $ make
 ```
 
-Build and install reclass
+Build and install reclass (Linux)
 
 ```bash
 $ make install
+```
+
+Cross-compile for Windows from Linux (requires `mingw-w64-gcc`)
+
+```bash
+$ make cross
+```
+
+On Arch Linux, install the cross-compiler with:
+
+```bash
+$ sudo pacman -S mingw-w64-gcc
 ```
 
 ## Third party libraries

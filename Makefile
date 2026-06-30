@@ -4,6 +4,9 @@ LDFLAGS :=
 
 RELEASE_FLAGS := -O3 -march=native -flto -DNDEBUG -fvisibility=hidden -fno-unwind-tables -fno-asynchronous-unwind-tables
 
+MINGW_CC      := x86_64-w64-mingw32-gcc
+MINGW_FLAGS   := -std=c11 -O3 -flto -DNDEBUG -fvisibility=hidden
+
 ifeq ($(OS),Windows_NT)
     OUT     := reclass.dll
     SHFLAGS := -shared
@@ -25,7 +28,7 @@ else
     COPY := cp
 endif
 
-.PHONY: all release test install clean
+.PHONY: all release test install clean cross
 
 all: $(OUT)
 
@@ -42,6 +45,9 @@ test: reclass_test
 
 install: $(OUT)
 	$(COPY) $< "$(INSTALL_PATH)"
+
+cross: reclass.c thirdparty/libsnare.h
+	$(MINGW_CC) $(MINGW_FLAGS) -shared -o reclass.dll $<
 
 clean:
 	$(RM) $(OUT) reclass_test *.patched.js

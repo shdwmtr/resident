@@ -699,7 +699,7 @@ Public License instead of this License.  But first, please read
 #endif
 
 typedef void Display;
-typedef int  Bool;
+typedef int Bool;
 #include <dlfcn.h>
 #include <linux/limits.h>
 #include <stdio.h>
@@ -781,6 +781,7 @@ HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
 
 #ifdef _WIN32
 #include <windows.h>
+#include <sys/stat.h>
 #define plat_strdup _strdup
 #else
 #include <dlfcn.h>
@@ -1741,7 +1742,7 @@ __attribute__((constructor)) static void init(void) { install_hook(); }
 #endif /* __linux__ */
 
 #ifdef _WIN32
-extern snare_inline_t g_win32_cef_hook;
+static snare_inline_t g_win32_cef_hook;
 #endif
 
 int tramp_cef_browser_host_create_browser(const void *_1,
