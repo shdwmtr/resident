@@ -1,6 +1,8 @@
 # reclass
 
-A independent utility tool that restores minified class names back into their original human readable, internal form before minification. This tool is particularly useful for themes for the Steam Client.
+An incredibly performant, independent utility tool that un-obfuscates minified class names on-the-fly. This tool is particularly useful for creating stable, future proof themes.
+
+This tool is entirely plugin loader agnostic, and supports both the Steam deck and client.
 
 Before:
 ```html
