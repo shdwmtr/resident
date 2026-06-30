@@ -779,15 +779,6 @@ HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
 
 #ifndef RECLASS_MAIN
 
-/* SNARE_IMPLEMENTATION must be defined before the first include — the header
- * guard prevents re-inclusion so a second #include with the define set is
- * always a no-op. */
-#define SNARE_STATIC
-#define SNARE_IMPLEMENTATION
-#include "thirdparty/libsnare.h"
-#include <stdarg.h>
-#include <stdatomic.h>
-
 #ifdef _WIN32
 #include <windows.h>
 #define plat_strdup _strdup
@@ -797,6 +788,16 @@ HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
 #include <unistd.h>
 #define plat_strdup strdup
 #endif
+
+#include <stdarg.h>
+#include <stdatomic.h>
+
+/* SNARE_IMPLEMENTATION must be defined before the first include. the header
+ * guard prevents re-inclusion so a second #include with the define set is
+ * always a no-op. */
+#define SNARE_STATIC
+#define SNARE_IMPLEMENTATION
+#include "thirdparty/libsnare.h"
 
 #if defined(OS_WIN)
 #define CEF_CALLBACK __stdcall
