@@ -2,7 +2,7 @@ CC      ?= cc
 CFLAGS  := -std=c11 -Wall -Wextra
 LDFLAGS :=
 
-RELEASE_FLAGS := -O3 -march=native -flto -DNDEBUG
+RELEASE_FLAGS := -O3 -march=native -flto -DNDEBUG -fvisibility=hidden -fno-unwind-tables -fno-asynchronous-unwind-tables
 
 ifeq ($(OS),Windows_NT)
     OUT     := reclass.dll
