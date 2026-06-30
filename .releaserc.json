@@ -4,7 +4,7 @@
         "@semantic-release/commit-analyzer",
         "@semantic-release/release-notes-generator",
         ["@semantic-release/exec", {
-            "prepareCmd": "make reclass.so && strip --strip-all reclass.so && x86_64-w64-mingw32-gcc -std=c11 -O3 -flto -DNDEBUG -fvisibility=hidden -shared -o reclass.dll reclass.c && x86_64-w64-mingw32-strip --strip-all reclass.dll"
+            "prepareCmd": "make reclass.so && strip --strip-all reclass.so && make cross && x86_64-w64-mingw32-strip --strip-all reclass.dll"
         }],
         ["@semantic-release/github", {
             "assets": [
