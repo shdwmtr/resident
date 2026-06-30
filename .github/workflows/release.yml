@@ -15,8 +15,8 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Install mingw
-              run: sudo apt-get install -y gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+            - name: Install deps
+              run: sudo apt-get install -y gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 libx11-dev libxtst-dev
 
             - uses: cycjimmy/semantic-release-action@v4
               env:
