@@ -23,6 +23,7 @@ else
     INSTALL_PATH := $(HOME)/.steam/steam/ubuntu12_64/libXtst.so.6
     RM   := rm -f
     COPY := cp
+    X11_CFLAGS := $(shell pkg-config --cflags x11 xtst 2>/dev/null)
 endif
 
 .PHONY: all release test install clean
@@ -32,7 +33,7 @@ all: $(OUT)
 release: $(OUT) reclass_test
 
 $(OUT): reclass.c thirdparty/libsnare.h
-	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(SHFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(SHFLAGS) $(X11_CFLAGS) -o $@ $<
 
 reclass_test: reclass.c
 	$(CC) $(CFLAGS) $(RELEASE_FLAGS) -DRECLASS_MAIN -o $@ $<
