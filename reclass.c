@@ -749,64 +749,6 @@ Public License instead of this License.  But first, please read
     return orig args;                                                          \
   }
 
-static inline void *dlopen_or_log(const char *path, int flags) {
-  void *handle = dlopen(path, flags);
-  if (!handle)
-    LOG_ERROR("Failed to dlopen %s: %s", path, dlerror());
-  return handle;
-}
-
-static inline void *dlsym_or_log(void *handle, const char *symbol) {
-  void *fn = dlsym(handle, symbol);
-  if (!fn)
-    LOG_ERROR("Failed to locate symbol %s: %s", symbol, dlerror());
-  return fn;
-}
-
-static inline void get_steam_lib_path(char *buf, const char *parent,
-                                      const char *arch, const char *lib) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-truncation"
-  snprintf(buf, PATH_MAX, "%s/steam-runtime/usr/lib/%s/%s", parent, arch, lib);
-#pragma GCC diagnostic pop
-}
-
-/** Returns $HOME/.steam/steam/ubuntu12_32 — the fixed base of the Steam
- * installation. */
-static inline const char *get_steam_ubuntu12_path(void) {
-  static char path[PATH_MAX];
-  const char *home = getenv("HOME");
-  if (!home)
-    return NULL;
-  snprintf(path, PATH_MAX, "%s/.steam/steam/ubuntu12_32", home);
-  return path;
-}
-
-static inline char *get_process_path(void) {
-  static char path[PATH_MAX];
-  ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
-  if (len != -1) {
-    path[len] = '\0';
-    return path;
-  }
-  return NULL;
-}
-
-static inline char *get_process_path_parent(void) {
-  static char parentPath[PATH_MAX];
-  char *exePath = get_process_path();
-  if (!exePath)
-    return NULL;
-
-  strncpy(parentPath, exePath, PATH_MAX - 1);
-  parentPath[PATH_MAX - 1] = '\0';
-  char *lastSlash = strrchr(parentPath, '/');
-
-  if (lastSlash)
-    *lastSlash = '\0';
-  return parentPath;
-}
-
 static void *h_xtst = NULL;
 HOOK_FUNC(h_xtst, XTestFakeButtonEvent, int,
           (Display * a, unsigned int b, Bool c, unsigned long d), (a, b, c, d))
