@@ -1,6 +1,6 @@
 # Resident
 
-**R**e **E**nable **S**team **IDENT**ifiers
+**RES**tore Steam's internal class **IDENT**ifiers.
 
 An incredibly small, performant, independent utility tool that un-obfuscates minified class names in Steams CEF on-the-fly. This tool is particularly useful for creating stable, future proof themes.
 
