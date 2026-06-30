@@ -1,6 +1,6 @@
 # ReClass
 
-An incredibly performant, independent utility tool that un-obfuscates minified class names on-the-fly. This tool is particularly useful for creating stable, future proof themes.
+An incredibly performant, independent utility tool that un-obfuscates minified class names in Steams CEF on-the-fly. This tool is particularly useful for creating stable, future proof themes.
 
 This tool is entirely plugin loader agnostic, and supports both the Steam deck and client.
 
@@ -62,6 +62,11 @@ This is why Millennium moved themes outside of steamui/ as any very deep directo
 under L3 cache pressure, making startup sometimes 15,20, or even n seconds (linearly) slower depending on your setup. 
 
 <img src="https://github.com/user-attachments/assets/ac75dce0-b719-49f9-9050-f0cca811a46b" />
+
+# Accuracy & Reliability
+
+The patcher cannot generate invalid syntax, it's fully rulled out of the language. It *technically* can produce runtime errors by modifying strings that 
+aren't in class modules, but the parameters are very strict - this likely won't happen. 
 
 # Hooking
 
