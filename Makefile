@@ -21,7 +21,7 @@ ifeq ($(OS),Windows_NT)
     RM   := del /f
     COPY := copy /y
 else
-    OUT     := resident.so
+    OUT     := libresident.so
     SHFLAGS := -shared -fPIC
     INSTALL_PATH := $(HOME)/.steam/steam/ubuntu12_64/libXtst.so.6
     RM   := rm -f
