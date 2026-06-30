@@ -35,7 +35,7 @@ all: $(OUT)
 release: $(OUT) reclass_test
 
 $(OUT): reclass.c thirdparty/libsnare.h
-	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(SHFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(SHFLAGS) -o $@ $< -lpthread
 
 reclass_test: reclass.c
 	$(CC) $(CFLAGS) $(RELEASE_FLAGS) -DRECLASS_MAIN -o $@ $<
@@ -47,7 +47,7 @@ install: $(OUT)
 	$(COPY) $< "$(INSTALL_PATH)"
 
 cross: reclass.c thirdparty/libsnare.h
-	$(MINGW_CC) $(MINGW_FLAGS) -shared -o reclass.dll $<
+	$(MINGW_CC) $(MINGW_FLAGS) -shared -o reclass.dll $< -lpthread
 
 clean:
 	$(RM) $(OUT) reclass_test *.patched.js

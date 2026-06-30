@@ -780,8 +780,8 @@ HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
 #ifndef RECLASS_MAIN
 
 #ifdef _WIN32
-#include <windows.h>
 #include <sys/stat.h>
+#include <windows.h>
 #define plat_strdup _strdup
 #else
 #include <dlfcn.h>
@@ -790,6 +790,7 @@ HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
 #define plat_strdup strdup
 #endif
 
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdatomic.h>
 
@@ -1104,8 +1105,44 @@ static int rc_is_key_cont(unsigned char c, int hyphen_ok) {
 static int rc_is_hash_char(unsigned char c) {
   return ASCII_ALNUM(c) || c == '_' || c == '-';
 }
+static int rc_is_js_ident_cont(unsigned char c) {
+  return ASCII_ALNUM(c) || c == '_' || c == '$';
+}
 
-/* O(n) single-pass rewriter. no regex engine, no DFA, no backtracking */
+static const char *rc_skip_ws(const char *p, const char *end) {
+  while (p < end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r'))
+    p++;
+  return p;
+}
+
+/*
+ * If p points at '.exports\s*=\s*{' (assignment, not ==) and the byte before
+ * p is a JS identifier character, returns a pointer just past '{'. else NULL.
+ */
+static const char *rc_match_exports_open(const char *p, const char *end) {
+  if (p == NULL || p[-1] == '\0')
+    return NULL;
+  if (!rc_is_js_ident_cont((unsigned char)p[-1]))
+    return NULL;
+  if (p + 8 > end || memcmp(p, ".exports", 8) != 0)
+    return NULL;
+  const char *q = rc_skip_ws(p + 8, end);
+  if (q >= end || *q != '=')
+    return NULL;
+  q++;
+  if (q < end && *q == '=')
+    return NULL; /* == or === */
+  q = rc_skip_ws(q, end);
+  if (q >= end || *q != '{')
+    return NULL;
+  return q + 1;
+}
+
+/*
+ * single-pass lex transducer constrained to IDENT.exports={...} blocks (seems all class modules live in these).
+ * CSS module export objects are always flat and always assigned like this,
+ * which helps reduce the possibility of false posibilities.
+ * */
 static char *reclass_patch(const char *src, size_t src_len, size_t *out_len,
                            size_t *out_count) {
   reclass_buf_t out = {0};
@@ -1120,6 +1157,7 @@ static char *reclass_patch(const char *src, size_t src_len, size_t *out_len,
   /* lazy-flush. track the last-emitted position, copy spans in one memcpy per
    * match. */
   const char *flush = src;
+  int in_block = 0;
 
 #define RC_EMIT(data, n)                                                       \
   do {                                                                         \
@@ -1133,6 +1171,27 @@ static char *reclass_patch(const char *src, size_t src_len, size_t *out_len,
   } while (0)
 
   while (p < end) {
+    if (!in_block) {
+      const char *dot = memchr(p, '.', (size_t)(end - p));
+      if (!dot)
+        break;
+      p = dot;
+      const char *after = rc_match_exports_open(p, end);
+      if (after) {
+        p = after;
+        in_block = 1;
+      } else {
+        p++;
+      }
+      continue;
+    }
+
+    if (*p == '}') {
+      in_block = 0;
+      p++;
+      continue;
+    }
+
     const char *match_start = p;
     const char *key_start;
     size_t key_len;
@@ -1231,6 +1290,119 @@ oom:
   free(out.data);
   return NULL;
 }
+
+/**
+ * o(n) single-pass transducer: spreads classList.add/remove arguments so that
+ * the human-readable suffix appended by reclass_patch survives as a real class.
+ *
+ * detects: classList.add(IDENT[()].IDENT) and classList.remove(IDENT[()].IDENT)
+ * rewrites: classList.add(...IDENT[()].IDENT.split(" "))
+ *
+ * without this patch, add/remove will be directly called with a hooked class.
+ * before:
+ * const className = "ABCDEF";
+ * ...classList.add(className)
+ * after:
+ * const className = "ABCDEF className";
+ * ...classList.add(className) // err: add/remove only accept 1 class per
+ * parameter
+ *
+ * the optional () covers the common webpack pattern where the CSS module object
+ * is returned by a factory call: We().ErrorShake rather than styles.ErrorShake.
+ *
+ * spread handles both the pre-patch case (no space -> one element) and the
+ * post-patch case (space -> two elements) without UB or DOMException.
+ */
+static char *reclass_patch_classlist(const char *src, size_t src_len,
+                                     size_t *out_len, size_t *out_count) {
+  reclass_buf_t out = {0};
+  if (!rcbuf_reserve(&out, src_len + src_len / 8 + 4096))
+    return NULL;
+
+  size_t count = 0;
+  const char *p = src;
+  const char *end = src + src_len;
+  const char *flush = src;
+
+#define CL_EMIT(data, n)                                                       \
+  do {                                                                         \
+    if (!rcbuf_write(&out, (data), (n)))                                       \
+      goto oom;                                                                \
+  } while (0)
+#define JS_IDENT_START(c) (ASCII_ALPHA(c) || (c) == '_' || (c) == '$')
+#define JS_IDENT_CONT(c) (ASCII_ALNUM(c) || (c) == '_' || (c) == '$')
+
+  while (p < end) {
+    const char *cp = memchr(p, 'c', (size_t)(end - p));
+    if (!cp)
+      break;
+    p = cp;
+
+    const char *after_paren;
+    if ((size_t)(end - p) >= 14 && memcmp(p, "classList.add(", 14) == 0)
+      after_paren = p + 14;
+    else if ((size_t)(end - p) >= 17 && memcmp(p, "classList.remove(", 17) == 0)
+      after_paren = p + 17;
+    else {
+      p++;
+      continue;
+    }
+
+    const char *q = after_paren;
+    if (q >= end || !JS_IDENT_START((unsigned char)*q)) {
+      p++;
+      continue;
+    }
+    const char *mod_start = q;
+    while (q < end && JS_IDENT_CONT((unsigned char)*q))
+      q++;
+    /* optional zero-argument call: IDENT() */
+    if (q + 1 < end && q[0] == '(' && q[1] == ')')
+      q += 2;
+    if (q >= end || *q != '.') {
+      p++;
+      continue;
+    }
+    q++;
+    if (q >= end || !JS_IDENT_START((unsigned char)*q)) {
+      p++;
+      continue;
+    }
+    while (q < end && JS_IDENT_CONT((unsigned char)*q))
+      q++;
+    const char *expr_end = q;
+    if (q >= end || *q != ')') {
+      p++;
+      continue;
+    }
+    q++;
+
+    CL_EMIT(flush, (size_t)(after_paren - flush));
+    CL_EMIT("...", 3);
+    CL_EMIT(mod_start, (size_t)(expr_end - mod_start));
+    CL_EMIT(".split(\" \")", 11);
+    CL_EMIT(")", 1);
+
+    flush = q;
+    p = q;
+    count++;
+  }
+
+#undef CL_EMIT
+#undef JS_IDENT_START
+#undef JS_IDENT_CONT
+
+  if (!rcbuf_write(&out, flush, (size_t)(end - flush)))
+    goto oom;
+  *out_len = out.len;
+  *out_count = count;
+  return out.data;
+
+oom:
+  free(out.data);
+  return NULL;
+}
+
 #ifndef RECLASS_MAIN
 /* return the path component of a URL (pointer into the same string). */
 static const char *url_get_path(const char *url) {
@@ -1325,6 +1497,81 @@ static int lb_url_is_patchable(const char *url) {
          base[blen - 1] == 's';
 }
 
+#define RC_CACHE_CAP 64
+
+typedef struct {
+  char   path[PATH_MAX];
+  time_t mtime;
+  off_t  fsize;
+  char  *data;
+  size_t data_len;
+} rc_cache_entry_t;
+
+static rc_cache_entry_t g_rc_cache[RC_CACHE_CAP];
+static size_t           g_rc_cache_len;
+static pthread_mutex_t  g_rc_cache_mu = PTHREAD_MUTEX_INITIALIZER;
+
+/**
+ * returns a malloc'd copy of the cached result, or NULL on miss.
+ * cached entries are immutable after insert, so the copy is done outside the
+ * lock.
+ */
+static char *rc_cache_get(const char *path, time_t mtime, off_t fsize,
+                          size_t *out_len) {
+  pthread_mutex_lock(&g_rc_cache_mu);
+  for (size_t i = 0; i < g_rc_cache_len; i++) {
+    rc_cache_entry_t *e = &g_rc_cache[i];
+    if (e->mtime == mtime && e->fsize == fsize &&
+        strcmp(e->path, path) == 0) {
+      size_t len = e->data_len;
+      char  *src = e->data;
+      pthread_mutex_unlock(&g_rc_cache_mu);
+      char *copy = malloc(len);
+      if (copy)
+        memcpy(copy, src, len);
+      *out_len = len;
+      return copy;
+    }
+  }
+  pthread_mutex_unlock(&g_rc_cache_mu);
+  return NULL;
+}
+
+/* stores a copy of data in the cache, keyed by (path, mtime, fsize). */
+static void rc_cache_put(const char *path, time_t mtime, off_t fsize,
+                         const char *data, size_t data_len) {
+  char *copy = malloc(data_len);
+  if (!copy)
+    return;
+  memcpy(copy, data, data_len);
+
+  pthread_mutex_lock(&g_rc_cache_mu);
+  for (size_t i = 0; i < g_rc_cache_len; i++) {
+    rc_cache_entry_t *e = &g_rc_cache[i];
+    if (strcmp(e->path, path) == 0) {
+      free(e->data);
+      e->data     = copy;
+      e->data_len = data_len;
+      e->mtime    = mtime;
+      e->fsize    = fsize;
+      pthread_mutex_unlock(&g_rc_cache_mu);
+      return;
+    }
+  }
+  if (g_rc_cache_len < RC_CACHE_CAP) {
+    rc_cache_entry_t *e = &g_rc_cache[g_rc_cache_len++];
+    strncpy(e->path, path, sizeof(e->path) - 1);
+    e->path[sizeof(e->path) - 1] = '\0';
+    e->mtime    = mtime;
+    e->fsize    = fsize;
+    e->data     = copy;
+    e->data_len = data_len;
+  } else {
+    free(copy);
+  }
+  pthread_mutex_unlock(&g_rc_cache_mu);
+}
+
 /* returns 1 if the URL actually maps to a file on disk. */
 static int lb_url_has_local_file(const char *url) {
   char fpath[PATH_MAX];
@@ -1344,6 +1591,22 @@ static int lb_handle_request(const char *url, char **data, uint32_t *size,
   char fpath[PATH_MAX];
   if (!url_to_local_path(url, fpath, sizeof(fpath)))
     return -1;
+
+  int patchable = lb_url_is_patchable(url);
+  struct stat st;
+  int have_stat = patchable && stat(fpath, &st) == 0;
+
+  if (have_stat) {
+    size_t cached_len;
+    char *cached = rc_cache_get(fpath, st.st_mtime, st.st_size, &cached_len);
+    if (cached) {
+      fprintf(stderr, "[reclass] %s: cache hit\n", url_get_basename(url));
+      *data      = cached;
+      *size      = (uint32_t)cached_len;
+      *mime_type = "application/javascript";
+      return 0;
+    }
+  }
 
   FILE *f = fopen(fpath, "rb");
   if (!f)
@@ -1369,15 +1632,25 @@ static int lb_handle_request(const char *url, char **data, uint32_t *size,
   }
   fclose(f);
 
-  if (lb_url_is_patchable(url)) {
+  if (patchable) {
     size_t out_len, count;
     char *patched = reclass_patch(raw, (size_t)fsz, &out_len, &count);
     free(raw);
     if (!patched)
       return -1;
-    fprintf(stderr, "[reclass] %s: %zu class(es) rewritten\n",
-            url_get_basename(url), count);
-    *data = patched;
+    size_t cl_count;
+    char *patched2 =
+        reclass_patch_classlist(patched, out_len, &out_len, &cl_count);
+    free(patched);
+    if (!patched2)
+      return -1;
+    if (have_stat)
+      rc_cache_put(fpath, st.st_mtime, st.st_size, patched2, out_len);
+    fprintf(
+        stderr,
+        "[reclass] %s: %zu class(es) rewritten, %zu classList call(s) spread\n",
+        url_get_basename(url), count, cl_count);
+    *data = patched2;
     *size = (uint32_t)out_len;
   } else {
     *data = raw;
@@ -1909,23 +2182,31 @@ int main(int argc, char **argv) {
     fprintf(stderr, "reclass_patch: oom\n");
     return 1;
   }
+  size_t cl_count;
+  char *out2 = reclass_patch_classlist(out, out_len, &out_len, &cl_count);
+  free(out);
+  if (!out2) {
+    fprintf(stderr, "reclass_patch_classlist: oom\n");
+    return 1;
+  }
   clock_gettime(CLOCK_MONOTONIC, &t2);
 
   FILE *wf = fopen(output, "wb");
   if (!wf) {
     perror(output);
-    free(out);
+    free(out2);
     return 1;
   }
-  fwrite(out, 1, out_len, wf);
+  fwrite(out2, 1, out_len, wf);
   fclose(wf);
-  free(out);
+  free(out2);
   clock_gettime(CLOCK_MONOTONIC, &t3);
 
   double rm = rc_ms(t0, t1), pm = rc_ms(t1, t2), wm = rc_ms(t2, t3);
-  printf("%zu replacements → %s  (read %.2fms, patch %.2fms, write %.2fms, "
+  printf("%zu replacements, %zu classList spread → %s  (read %.2fms, patch "
+         "%.2fms, write %.2fms, "
          "total %.2fms)\n",
-         count, output, rm, pm, wm, rm + pm + wm);
+         count, cl_count, output, rm, pm, wm, rm + pm + wm);
   return 0;
 }
 #endif /* RECLASS_MAIN */
