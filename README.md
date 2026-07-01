@@ -27,17 +27,14 @@ If you like this tool, consider starring it ⭐
 Packing notice: resident is entirely stateless, and has no config. If you are packaging resident, it is recommended to simply keep it in your installation folder, and
 simply hard-link/soft-link (on windows, by default, softlinks need admin. hard don't) the soname/dll into the webhelpers directory. Killing Steam's webhelper will cause Steam to restart it, which will load/unload resident depending.
 
-## Manual Installation
-
-Linux:
+## Linux
 ```bash
 # Installing resident
 $ mv /path/to/resident.so ~/.steam/steam/ubuntu12_64/libXtst.so.6
 # uninstalling resident
 $ rm ~/.steam/steam/ubuntu12_64/libXtst.so.6
 ```
-Windows:
-
+## Windows
 Copy the installed `resident.dll` binary into the `steamwebhelper.exe`'s owning directory, renaming it to `version.dll`. 
 Same applies if you are hardlinking to the webhelpers owning directory; it must be named `version.dll`. 
 
@@ -71,7 +68,7 @@ stateDiagram-v2
 `resident` implements a linear-time lexical transducer (a [finite-state transducer](https://en.wikipedia.org/wiki/Finite-state_transducer)) over a byte stream. 
 It uses a [greedy](https://en.wikipedia.org/wiki/Greedy_algorithm), left-anchored PEG recognize with a single bounded lookahead rewind, scanning for two token patterns defined by the EBNF grammar below.
 
-### [EBNF](https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_form) (Extended Backus–Naur) grammar
+## [EBNF](https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_form) (Extended Backus–Naur) grammar
 
 ```
 pattern  ::= quoted_key | bare_key
@@ -81,6 +78,60 @@ key_q    ::= [a-zA-Z_][a-zA-Z0-9_-]*
 key_b    ::= [a-zA-Z_][a-zA-Z0-9_]*
 hash     ::= [a-zA-Z0-9_-]{18,30}
 ```
+
+## High Level
+
+Class modules are rewritten as diagramed below. This happens at the CEF level, both Steam and CEF are under the impression that content `B` is the original, they both have no idea.
+At the native C bindings, CDP (Inspector Network tab), and JS level, this *is* Steam's original JS - even though it's not. 
+
+```js
+e.exports = {
+    "duration-app-launch": "800ms",
+    VCenter: "_1T7c8767I5SNmJ3DC5uSr8",
+    BackgroundAnimation: "_1noPMemGV6O50ZVadg1Cxf",
+    "ItemFocusAnim-darkGrey": "_1ulNzAcgjuBmpgvc5wqLMD",
+    "ItemFocusAnim-translucent-white-10": "_3pmHfms_Y73-eEZ6-BSy3j",
+    "ItemFocusAnimBorder-darkGrey": "_335Bbo4P8V_X7iOeO9gc2e",
+    focusAnimation: "_2v_k6SupaG0hlrpoCWsND4"
+}
+```
+
+```js
+e.exports = {
+    "duration-app-launch": "800ms", // skipped, not a class defined by our lang.
+    VCenter:"_1T7c8767I5SNmJ3DC5uSr8 VCenter",
+    BackgroundAnimation:"_1noPMemGV6O50ZVadg1Cxf BackgroundAnimation",
+    "ItemFocusAnim-darkGrey":"_1ulNzAcgjuBmpgvc5wqLMD ItemFocusAnim-darkGrey",
+    "ItemFocusAnim-translucent-white-10":"_3pmHfms_Y73-eEZ6-BSy3j ItemFocusAnim-translucent-white-10",
+    "ItemFocusAnimBorder-darkGrey":"_335Bbo4P8V_X7iOeO9gc2e ItemFocusAnimBorder-darkGrey",
+    focusAnimation:"_2v_k6SupaG0hlrpoCWsND4 focusAnimation"
+}
+```
+
+## Other Rewrites
+
+`*.classList.add/remove`: Both of these methods expect a single class, which used to be the case. Not after our patches though.
+
+* detects: `classList.add(IDENT[()].IDENT) and classList.remove(IDENT[()].IDENT)`
+* rewrites: `classList.add(...IDENT[()].IDENT.split(" "))`
+
+Without this patch, add/remove will be directly called with a hooked class.
+
+### Before:
+```js
+// focusAnimation: "_2v_k6SupaG0hlrpoCWsND4 focusAnimation"
+...classList.add(A().focusAnimation) // err: add/remove only accept 1 class per
+```
+
+### After:
+```js
+// focusAnimation: "_2v_k6SupaG0hlrpoCWsND4 focusAnimation"
+...classList.add(...A().focusAnimation.split(" ")) // adds both, hell yeah
+```
+
+From what I've googled, this is the only situation where we would face issues. 
+All other API's are safe at runtime. (excluding `document.querySelector`, etc. Valve dev's are intelligent and wouldn't logically use raw DOM APIs with react)
+
 # Benchmarks[^4]
 
 These are benchmarks are the average patch time over 100 runs on an Intel i9-14900k.
