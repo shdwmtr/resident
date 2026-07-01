@@ -740,7 +740,6 @@ Public License instead of this License.  But first, please read
 #pragma comment(                                                               \
     linker,                                                                    \
     "/export:VerQueryValueW=C:\\Windows\\System32\\version.VerQueryValueW")
-#endif
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -774,6 +773,7 @@ static inline void resident_win_log(const char *tag, const char *fmt, ...) {
 #define LOG_INFO(fmt, ...) resident_win_log("INFO", fmt, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) resident_win_log("ERROR", fmt, ##__VA_ARGS__)
 #define LOG_WARN(fmt, ...) resident_win_log("WARN", fmt, ##__VA_ARGS__)
+#endif /* _WIN32 */
 
 #ifndef SHARED_H
 #define SHARED_H
