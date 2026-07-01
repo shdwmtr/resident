@@ -2,7 +2,7 @@
 
 **RES**tore Steam's internal class **IDENT**ifiers.
 
-An incredibly small, performant, independent utility tool that un-obfuscates minified class names in Steams CEF on-the-fly. This tool is particularly useful for creating stable, future proof themes.
+An incredibly small, performant, independent utility tool that un-obfuscates minified class names in Steams CEF on-the-fly in memory by modifying the heap. This tool is particularly useful for creating stable, future proof themes.
 
 ```diff
 diff --git a/tmp/before.html b/tmp/after.html
