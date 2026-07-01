@@ -15,7 +15,7 @@ index ec676a2..1ca47d7 100644
 ```
 
 
-`resident` is fully native, dependencyless, self-contained, portable, does not require CEF remote debugging, and has virtually no memory footprint. 
+`resident` is fully native, dependencyless, self-contained, portable, does not require CEF remote debugging, has virtually no memory footprint, and does NOT write to disk. 
 It entirely self-bootstraps itself, requiring **absolutely zero** user intervention.
 
 This tool is entirely plugin loader agnostic, and supports both the Steam deck and client. 
