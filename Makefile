@@ -10,6 +10,7 @@ MINGW_FLAGS   := -std=c11 -O3 -flto -DNDEBUG -fvisibility=hidden
 ifeq ($(OS),Windows_NT)
     OUT     := resident.dll
     SHFLAGS := -shared
+    LIBS    :=
     # query 32-bit registry view first (Steam is a 32-bit app on Windows)
     STEAM_DIR := $(shell powershell -NoProfile -Command \
         "(Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -ErrorAction SilentlyContinue).InstallPath")
@@ -23,6 +24,7 @@ ifeq ($(OS),Windows_NT)
 else
     OUT     := libresident.so
     SHFLAGS := -shared -fPIC
+    LIBS    := -lpthread
     INSTALL_PATH := $(HOME)/.steam/steam/ubuntu12_64/libXtst.so.6
     RM   := rm -f
     COPY := cp
@@ -35,7 +37,7 @@ all: $(OUT)
 release: $(OUT) resident_test
 
 $(OUT): resident.c thirdparty/libsnare.h
-	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(SHFLAGS) -o $@ $< -lpthread
+	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(SHFLAGS) -o $@ $< $(LIBS)
 
 resident_test: resident.c
 	$(CC) $(CFLAGS) $(RELEASE_FLAGS) -Dresident_MAIN -o $@ $<
@@ -47,7 +49,7 @@ install: $(OUT)
 	$(COPY) $< "$(INSTALL_PATH)"
 
 cross: resident.c thirdparty/libsnare.h
-	$(MINGW_CC) $(MINGW_FLAGS) -shared -o resident.dll $< -lpthread
+	$(MINGW_CC) $(MINGW_FLAGS) -shared -o resident.dll $<
 
 clean:
 	$(RM) $(OUT) resident_test *.patched.js

@@ -689,6 +689,92 @@ Public License instead of this License.  But first, please read
 #define _GNU_SOURCE
 #endif
 
+#ifdef _WIN32
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#ifndef _CRT_NONSTDC_NO_DEPRECATE
+#define _CRT_NONSTDC_NO_DEPRECATE
+#endif
+
+/** forward calls to real version.dll */
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:GetFileVersionInfoA=C:\\Windows\\System32\\version.GetFileVersionInfoA")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:GetFileVersionInfoExW=C:\\Windows\\System32\\version.GetFileVersionInfoExW")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:GetFileVersionInfoSizeA=C:\\Windows\\System32\\version.GetFileVersionInfoSizeA")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:GetFileVersionInfoSizeExW=C:\\Windows\\System32\\version.GetFileVersionInfoSizeExW")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:GetFileVersionInfoSizeW=C:\\Windows\\System32\\version.GetFileVersionInfoSizeW")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:GetFileVersionInfoW=C:\\Windows\\System32\\version.GetFileVersionInfoW")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:VerFindFileA=C:\\Windows\\System32\\version.VerFindFileA")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:VerFindFileW=C:\\Windows\\System32\\version.VerFindFileW")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:VerInstallFileA=C:\\Windows\\System32\\version.VerInstallFileA")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:VerInstallFileW=C:\\Windows\\System32\\version.VerInstallFileW")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:VerLanguageNameA=C:\\Windows\\System32\\version.VerLanguageNameA")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:VerLanguageNameW=C:\\Windows\\System32\\version.VerLanguageNameW")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:VerQueryValueA=C:\\Windows\\System32\\version.VerQueryValueA")
+#pragma comment(                                                               \
+    linker,                                                                    \
+    "/export:VerQueryValueW=C:\\Windows\\System32\\version.VerQueryValueW")
+#endif
+
+#include <stdarg.h>
+#include <stdio.h>
+/* clang-format off */
+#include <windows.h>
+#include <shellapi.h>
+/* clang-format on */
+#pragma comment(lib, "shell32.lib")
+
+static inline void resident_win_logv(const char *tag, const char *fmt,
+                                     va_list ap) {
+  char msg[1024];
+  vsnprintf(msg, sizeof(msg), fmt, ap);
+
+  SYSTEMTIME st;
+  GetLocalTime(&st);
+
+  char line[1100];
+  snprintf(line, sizeof(line), "[%02d:%02d.%03d] resident-%s: %s\n", st.wMinute,
+           st.wSecond, st.wMilliseconds, tag, msg);
+  OutputDebugStringA(line);
+}
+
+static inline void resident_win_log(const char *tag, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  resident_win_logv(tag, fmt, ap);
+  va_end(ap);
+}
+
+#define LOG_INFO(fmt, ...) resident_win_log("INFO", fmt, ##__VA_ARGS__)
+#define LOG_ERROR(fmt, ...) resident_win_log("ERROR", fmt, ##__VA_ARGS__)
+#define LOG_WARN(fmt, ...) resident_win_log("WARN", fmt, ##__VA_ARGS__)
+
 #ifndef SHARED_H
 #define SHARED_H
 
@@ -763,6 +849,7 @@ HOOK_FUNC(h_xtst, XTestFakeRelativeMotionEvent, int,
 HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
           (Display * a, int b, int c, int d, unsigned long e), (a, b, c, d, e))
 
+#else  /* _WIN32 */
 #endif /* !_WIN32 */
 #endif /* SHARED_H */
 
@@ -783,6 +870,9 @@ HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
 #include <sys/stat.h>
 #include <windows.h>
 #define plat_strdup _strdup
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
 #else
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -790,7 +880,19 @@ HOOK_FUNC(h_xtst, XTestFakeMotionEvent, int,
 #define plat_strdup strdup
 #endif
 
+#ifdef _WIN32
+typedef SRWLOCK resident_mutex_t;
+#define RESIDENT_MUTEX_INIT SRWLOCK_INIT
+#define resident_mutex_lock(m) AcquireSRWLockExclusive(m)
+#define resident_mutex_unlock(m) ReleaseSRWLockExclusive(m)
+#else
 #include <pthread.h>
+typedef pthread_mutex_t resident_mutex_t;
+#define RESIDENT_MUTEX_INIT PTHREAD_MUTEX_INITIALIZER
+#define resident_mutex_lock(m) pthread_mutex_lock(m)
+#define resident_mutex_unlock(m) pthread_mutex_unlock(m)
+#endif
+
 #include <stdarg.h>
 #include <stdatomic.h>
 
@@ -1008,9 +1110,13 @@ typedef struct _cef_response_filter_t {
 static void fatal(const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
+#ifdef _WIN32
+  resident_win_logv("FATAL", fmt, args);
+#else
   fprintf(stderr, "\033[31m");
   vfprintf(stderr, fmt, args);
   fprintf(stderr, "\033[0m\n");
+#endif
   va_end(args);
 }
 
@@ -1139,12 +1245,13 @@ static const char *rc_match_exports_open(const char *p, const char *end) {
 }
 
 /*
- * single-pass lex transducer constrained to IDENT.exports={...} blocks (seems all class modules live in these).
- * CSS module export objects are always flat and always assigned like this,
- * which helps reduce the possibility of false posibilities.
+ * single-pass lex transducer constrained to IDENT.exports={...} blocks (seems
+ * all class modules live in these). CSS module export objects are always flat
+ * and always assigned like this, which helps reduce the possibility of false
+ * posibilities.
  * */
 static char *resident_patch(const char *src, size_t src_len, size_t *out_len,
-                           size_t *out_count) {
+                            size_t *out_count) {
   resident_buf_t out = {0};
   /* pre-size to input + 25% headroom; rewriting grows each match by ~key_len
    * chars */
@@ -1293,7 +1400,8 @@ oom:
 
 /**
  * o(n) single-pass transducer: spreads classList.add/remove arguments so that
- * the human-readable suffix appended by resident_patch survives as a real class.
+ * the human-readable suffix appended by resident_patch survives as a real
+ * class.
  *
  * detects: classList.add(IDENT[()].IDENT) and classList.remove(IDENT[()].IDENT)
  * rewrites: classList.add(...IDENT[()].IDENT.split(" "))
@@ -1314,7 +1422,7 @@ oom:
  * post-patch case (space -> two elements) without UB or DOMException.
  */
 static char *resident_patch_classlist(const char *src, size_t src_len,
-                                     size_t *out_len, size_t *out_count) {
+                                      size_t *out_len, size_t *out_count) {
   resident_buf_t out = {0};
   if (!rcbuf_reserve(&out, src_len + src_len / 8 + 4096))
     return NULL;
@@ -1419,16 +1527,58 @@ static const char *url_get_basename(const char *url) {
   return slash ? slash + 1 : path;
 }
 
+#ifdef _WIN32
+static int win_extract_steam_root(char *out, size_t out_sz) {
+  int argc = 0;
+  LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  if (!argv)
+    return 0;
+
+  int found = 0;
+  for (int i = 0; i < argc; i++) {
+    if (wcsncmp(argv[i], L"-steampath=", 11) != 0)
+      continue;
+
+    char path[PATH_MAX];
+    int n = WideCharToMultiByte(CP_UTF8, 0, argv[i] + 11, -1, path,
+                                sizeof(path), NULL, NULL);
+    if (n > 0) {
+      char *sep = strrchr(path, '\\');
+      if (sep)
+        *sep = '\0';
+      strncpy(out, path, out_sz - 1);
+      out[out_sz - 1] = '\0';
+      found = 1;
+    }
+    break;
+  }
+
+  LocalFree(argv);
+  return found;
+}
+#endif
+
 static const char *get_steam_root(void) {
   static char root[PATH_MAX] = {0};
-  if (root[0])
+  static int resolved = 0;
+  if (resolved)
     return root;
+  resolved = 1;
 
   const char *env = getenv("STEAM_ROOT");
   if (env) {
     strncpy(root, env, sizeof(root) - 1);
     return root;
   }
+
+#ifdef _WIN32
+  char sp[PATH_MAX];
+  if (win_extract_steam_root(sp, sizeof(sp))) {
+    strncpy(root, sp, sizeof(root) - 1);
+    root[sizeof(root) - 1] = '\0';
+    return root;
+  }
+#endif
 
 #ifdef __linux__
   char exe[PATH_MAX] = {0};
@@ -1443,6 +1593,8 @@ static const char *get_steam_root(void) {
       struct stat st;
       if (stat(test, &st) == 0) {
         strncpy(root, exe, sizeof(root) - 1);
+        LOG_INFO("steam root resolved by walking up from /proc/self/exe: %s",
+                 root);
         return root;
       }
       sep = strrchr(exe, '/');
@@ -1500,16 +1652,16 @@ static int lb_url_is_patchable(const char *url) {
 #define RC_CACHE_CAP 64
 
 typedef struct {
-  char   path[PATH_MAX];
+  char path[PATH_MAX];
   time_t mtime;
-  off_t  fsize;
-  char  *data;
+  off_t fsize;
+  char *data;
   size_t data_len;
 } rc_cache_entry_t;
 
 static rc_cache_entry_t g_rc_cache[RC_CACHE_CAP];
-static size_t           g_rc_cache_len;
-static pthread_mutex_t  g_rc_cache_mu = PTHREAD_MUTEX_INITIALIZER;
+static size_t g_rc_cache_len;
+static resident_mutex_t g_rc_cache_mu = RESIDENT_MUTEX_INIT;
 
 /**
  * returns a malloc'd copy of the cached result, or NULL on miss.
@@ -1518,14 +1670,13 @@ static pthread_mutex_t  g_rc_cache_mu = PTHREAD_MUTEX_INITIALIZER;
  */
 static char *rc_cache_get(const char *path, time_t mtime, off_t fsize,
                           size_t *out_len) {
-  pthread_mutex_lock(&g_rc_cache_mu);
+  resident_mutex_lock(&g_rc_cache_mu);
   for (size_t i = 0; i < g_rc_cache_len; i++) {
     rc_cache_entry_t *e = &g_rc_cache[i];
-    if (e->mtime == mtime && e->fsize == fsize &&
-        strcmp(e->path, path) == 0) {
+    if (e->mtime == mtime && e->fsize == fsize && strcmp(e->path, path) == 0) {
       size_t len = e->data_len;
-      char  *src = e->data;
-      pthread_mutex_unlock(&g_rc_cache_mu);
+      char *src = e->data;
+      resident_mutex_unlock(&g_rc_cache_mu);
       char *copy = malloc(len);
       if (copy)
         memcpy(copy, src, len);
@@ -1533,7 +1684,7 @@ static char *rc_cache_get(const char *path, time_t mtime, off_t fsize,
       return copy;
     }
   }
-  pthread_mutex_unlock(&g_rc_cache_mu);
+  resident_mutex_unlock(&g_rc_cache_mu);
   return NULL;
 }
 
@@ -1545,16 +1696,16 @@ static void rc_cache_put(const char *path, time_t mtime, off_t fsize,
     return;
   memcpy(copy, data, data_len);
 
-  pthread_mutex_lock(&g_rc_cache_mu);
+  resident_mutex_lock(&g_rc_cache_mu);
   for (size_t i = 0; i < g_rc_cache_len; i++) {
     rc_cache_entry_t *e = &g_rc_cache[i];
     if (strcmp(e->path, path) == 0) {
       free(e->data);
-      e->data     = copy;
+      e->data = copy;
       e->data_len = data_len;
-      e->mtime    = mtime;
-      e->fsize    = fsize;
-      pthread_mutex_unlock(&g_rc_cache_mu);
+      e->mtime = mtime;
+      e->fsize = fsize;
+      resident_mutex_unlock(&g_rc_cache_mu);
       return;
     }
   }
@@ -1562,14 +1713,14 @@ static void rc_cache_put(const char *path, time_t mtime, off_t fsize,
     rc_cache_entry_t *e = &g_rc_cache[g_rc_cache_len++];
     strncpy(e->path, path, sizeof(e->path) - 1);
     e->path[sizeof(e->path) - 1] = '\0';
-    e->mtime    = mtime;
-    e->fsize    = fsize;
-    e->data     = copy;
+    e->mtime = mtime;
+    e->fsize = fsize;
+    e->data = copy;
     e->data_len = data_len;
   } else {
     free(copy);
   }
-  pthread_mutex_unlock(&g_rc_cache_mu);
+  resident_mutex_unlock(&g_rc_cache_mu);
 }
 
 /* returns 1 if the URL actually maps to a file on disk. */
@@ -1589,8 +1740,10 @@ static int lb_url_has_local_file(const char *url) {
 static int lb_handle_request(const char *url, char **data, uint32_t *size,
                              const char **mime_type) {
   char fpath[PATH_MAX];
-  if (!url_to_local_path(url, fpath, sizeof(fpath)))
+  if (!url_to_local_path(url, fpath, sizeof(fpath))) {
+    LOG_WARN("lb_handle_request: %s could not be mapped to a local path", url);
     return -1;
+  }
 
   int patchable = lb_url_is_patchable(url);
   struct stat st;
@@ -1600,22 +1753,25 @@ static int lb_handle_request(const char *url, char **data, uint32_t *size,
     size_t cached_len;
     char *cached = rc_cache_get(fpath, st.st_mtime, st.st_size, &cached_len);
     if (cached) {
-      fprintf(stderr, "[resident] %s: cache hit\n", url_get_basename(url));
-      *data      = cached;
-      *size      = (uint32_t)cached_len;
+      LOG_INFO("%s: cache hit (%zu bytes)", url_get_basename(url), cached_len);
+      *data = cached;
+      *size = (uint32_t)cached_len;
       *mime_type = "application/javascript";
       return 0;
     }
   }
 
   FILE *f = fopen(fpath, "rb");
-  if (!f)
+  if (!f) {
+    LOG_WARN("lb_handle_request: failed to open %s", fpath);
     return -1;
+  }
 
   fseek(f, 0, SEEK_END);
   long fsz = ftell(f);
   fseek(f, 0, SEEK_SET);
   if (fsz < 0) {
+    LOG_WARN("lb_handle_request: ftell failed for %s", fpath);
     fclose(f);
     return -1;
   }
@@ -1636,20 +1792,21 @@ static int lb_handle_request(const char *url, char **data, uint32_t *size,
     size_t out_len, count;
     char *patched = resident_patch(raw, (size_t)fsz, &out_len, &count);
     free(raw);
-    if (!patched)
+    if (!patched) {
       return -1;
+    }
     size_t cl_count;
     char *patched2 =
         resident_patch_classlist(patched, out_len, &out_len, &cl_count);
     free(patched);
-    if (!patched2)
+    if (!patched2) {
       return -1;
+    }
     if (have_stat)
       rc_cache_put(fpath, st.st_mtime, st.st_size, patched2, out_len);
-    fprintf(
-        stderr,
-        "[resident] %s: %zu class(es) rewritten, %zu classList call(s) spread\n",
-        url_get_basename(url), count, cl_count);
+    LOG_INFO("%s: %zu class(es) rewritten, %zu classList call(s) spread, "
+             "%zu bytes out",
+             url_get_basename(url), count, cl_count, out_len);
     *data = patched2;
     *size = (uint32_t)out_len;
   } else {
@@ -1920,8 +2077,9 @@ void *hooked_get_resource(void *_1, void *_2, void *_3,
 
 struct _cef_request_handler_t *hooked_get_request_handler(void *self) {
   struct _cef_request_handler_t *handler = original_get_request_handler(self);
-  if (!handler || !handler->get_resource_request_handler)
+  if (!handler || !handler->get_resource_request_handler) {
     return handler;
+  }
 
   if (!orig_get_resource) {
     orig_get_resource =
@@ -2021,6 +2179,9 @@ static snare_inline_t g_win32_cef_hook;
 int tramp_cef_browser_host_create_browser(const void *_1,
                                           struct _cef_client_t *c, void *_3,
                                           const void *_4, void *_5, void *_6) {
+  LOG_INFO("tramp_cef_browser_host_create_browser: called (client=%p)",
+           (void *)c);
+
   if (c && c->get_request_handler && !orig_c) {
     orig_c = c;
     original_get_request_handler =
@@ -2028,6 +2189,8 @@ int tramp_cef_browser_host_create_browser(const void *_1,
     c->get_request_handler =
         (struct _cef_request_handler_t * (CEF_CALLBACK *)(void *))
             hooked_get_request_handler;
+    LOG_INFO("tramp_cef_browser_host_create_browser: patched "
+             "client->get_request_handler");
   }
 
 #ifdef _WIN32
@@ -2070,17 +2233,27 @@ static snare_inline_t g_win32_cef_hook = NULL;
 
 static void *get_module_base(void) {
   HMODULE base = NULL;
+  int waited_ms = 0;
   while (!base) {
     base = GetModuleHandleA(hook_target_dll);
-    if (!base)
+    if (!base) {
+      if (waited_ms == 0)
+        LOG_INFO("get_module_base: waiting for %s to load...", hook_target_dll);
       Sleep(100);
+      waited_ms += 100;
+    }
   }
+  LOG_INFO("get_module_base: %s loaded at %p (waited %dms)", hook_target_dll,
+           (void *)base, waited_ms);
   return base;
 }
 static void *get_fn_address(void) {
-  return (void *)GetProcAddress((HMODULE)get_module_base(), hook_fn_name);
+  void *addr = (void *)GetProcAddress((HMODULE)get_module_base(), hook_fn_name);
+  LOG_INFO("get_fn_address: %s resolved to %p", hook_fn_name, addr);
+  return addr;
 }
 void win32_initialize_trampoline(void) {
+  LOG_INFO("win32_initialize_trampoline: starting");
   void *proc = get_fn_address();
   if (!proc) {
     fatal("ordinate %s not found in %s", hook_fn_name, hook_target_dll);
@@ -2093,14 +2266,19 @@ void win32_initialize_trampoline(void) {
     fatal("failed to create hook on %s", hook_fn_name);
     return;
   }
+  LOG_INFO("win32_initialize_trampoline: hook object created for %s at %p",
+           hook_fn_name, proc);
 
   if (snare_inline_install(g_win32_cef_hook) < 0) {
     fatal("failed to install hook on %s", hook_fn_name);
     snare_inline_free(g_win32_cef_hook);
     g_win32_cef_hook = NULL;
+  } else {
+    LOG_INFO("win32_initialize_trampoline: hook installed on %s", hook_fn_name);
   }
 }
 void win32_uninitialize_trampoline(void) {
+  LOG_INFO("win32_uninitialize_trampoline: called");
   if (g_win32_cef_hook) {
     snare_inline_remove(g_win32_cef_hook);
     snare_inline_free(g_win32_cef_hook);
