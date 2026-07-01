@@ -1,4 +1,4 @@
-# Resident[^1]
+# Resident 🪑[^1]
 
 **RES**tore Steam's internal class **IDENT**ifiers.
 
