@@ -40,7 +40,7 @@ $(OUT): resident.c thirdparty/libsnare.h
 	$(CC) $(CFLAGS) $(RELEASE_FLAGS) $(SHFLAGS) -o $@ $< $(LIBS)
 
 resident_test: resident.c
-	$(CC) $(CFLAGS) $(RELEASE_FLAGS) -Dresident_MAIN -o $@ $<
+	$(CC) $(CFLAGS) $(RELEASE_FLAGS) -DRESIDENT_MAIN -o $@ $<
 
 test: resident_test
 	./resident_test tests/chunk~2dcc5aaf7.js

@@ -1333,7 +1333,7 @@ static char *resident_patch(const char *src, size_t src_len, size_t *out_len,
       continue;
     }
 
-    if (p + 2 > end || p[0] != ':' || p[1] != '"') {
+    if (p >= end || *p != ':') {
       /*
        * p already is a non key start char, so no sub-match can logically begin
        * before p. we can optimize out the rewind entirely.
@@ -1342,7 +1342,17 @@ static char *resident_patch(const char *src, size_t src_len, size_t *out_len,
         p = match_start + 1;
       continue;
     }
-    p += 2;
+    /*
+     * pretty-printed output allows whitespace between ':' and the value,
+     * e.g. `key: "hash"` rather than minified `key:"hash"`
+     */
+    const char *value_quote = rc_skip_ws(p + 1, end);
+    if (value_quote >= end || *value_quote != '"') {
+      if (is_quoted)
+        p = match_start + 1;
+      continue;
+    }
+    p = value_quote + 1;
 
     const char *hash_start = p;
     while (p < end && rc_is_hash_char((unsigned char)*p))
