@@ -156,7 +156,7 @@ aren't in class modules, but the parameters are very strict - this likely won't 
 
 Hooking relies on DLL lookup path hijacking. The **steamwebhelper.exe** *links* **version.dll** (meaning the wloader loads version.dll into the process before `main()/__constructor__()`) for version utilities. 
 **version.dll** is officially shipped with Windows as a builtin system component, in System32. Historically, **version.dll** was never made a [**KnownDLL**](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order) for security reasons (debated), meaning
-when wloader calls LoadLibrary on **version.dll**, it will actually try to look it up in the cwd instead of System32 directly. This means we can create a *fake* **version.dll** whenever the **steamwebhelper.exe** lives, and if we export its IAT symbol table to the real **version.dll**
+when wloader calls LoadLibrary on **version.dll**, it will actually try to look it up in the cwd instead of System32 directly. This means we can create a *fake* **version.dll** wherever the **steamwebhelper.exe** lives, and if we import and re-export the real **version.dll**s symbol table 
 from System32, we have internal memory access to steams webhelper. From there we setup the hooks documented below. 
 
 ## Unix
